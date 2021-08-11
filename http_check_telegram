@@ -5,7 +5,6 @@ CONFIG=$1
 
 #Alias DB command for easy future adjustments
 SQL='sqlite3'
-alias sql="$SQL"
 
 # Check for dependencies
 if ! which $SQL >/dev/null 2>&1; then
@@ -60,7 +59,7 @@ fi
 
 #DB functions
 db_create() {
-    sql $DB "CREATE TABLE problem (
+    $SQL $DB "CREATE TABLE problem (
                 site TEXT UNIQUE NOT NULL,
                 count INT NOT NULL DEFAULT 0,
                 alert INT NOT NULL DEFAULT 0,
@@ -68,18 +67,18 @@ db_create() {
               );"
 }
 db_addsite() {
-    sql $DB "INSERT OR IGNORE INTO problem (site) VALUES('$1');"
+    $SQL $DB "INSERT OR IGNORE INTO problem (site) VALUES('$1');"
 }
 db_inc() {
-    sql $DB "UPDATE problem SET count = count + 1 WHERE site = '$1' AND count < $MAX_COUNT;"
-    if [ $(sql $DB "SELECT count FROM problem WHERE site = '$1';") -ge $MAX_COUNT ]; then
-       sql $DB "UPDATE problem SET alert = 1 WHERE site = '$1';"
+    $SQL $DB "UPDATE problem SET count = count + 1 WHERE site = '$1' AND count < $MAX_COUNT;"
+    if [ $($SQL $DB "SELECT count FROM problem WHERE site = '$1';") -ge $MAX_COUNT ]; then
+       $SQL $DB "UPDATE problem SET alert = 1 WHERE site = '$1';"
     fi
 }
 db_dec() {
-    sql $DB "UPDATE problem SET count = count - 1 WHERE site = '$1' AND count > 0;"
-    if [ $(sql $DB "SELECT count FROM problem WHERE site = '$1';") -le 0 ]; then
-       sql $DB "UPDATE problem SET alert = 0 WHERE site = '$1';"
+    $SQL $DB "UPDATE problem SET count = count - 1 WHERE site = '$1' AND count > 0;"
+    if [ $($SQL $DB "SELECT count FROM problem WHERE site = '$1';") -le 0 ]; then
+       $SQL $DB "UPDATE problem SET alert = 0 WHERE site = '$1';"
     fi
 }
 
@@ -156,27 +155,27 @@ done || exit 2
 ### fi
 
 # Find down sites without sent alerts
-unsent=$(sql $DB "SELECT count(*) FROM problem WHERE alert = 1 AND sent = 0;")
-cleared=$(sql $DB "SELECT count(*) FROM problem WHERE alert = 0 AND sent = 1;")
-down=$(sql $DB "SELECT count(*) FROM problem WHERE alert = 1;")
-downlist=$(sql $DB "SELECT site FROM problem WHERE alert = 1;" | perl -p -e 's/\n/%0A/g')
+unsent=$($SQL $DB "SELECT count(*) FROM problem WHERE alert = 1 AND sent = 0;")
+cleared=$($SQL $DB "SELECT count(*) FROM problem WHERE alert = 0 AND sent = 1;")
+down=$($SQL $DB "SELECT count(*) FROM problem WHERE alert = 1;")
+downlist=$($SQL $DB "SELECT site FROM problem WHERE alert = 1;" | perl -p -e 's/\n/%0A/g')
 
 # If ANY sites have unsent alerts, send a list of ALL sites in 'alert' state
 if [ $unsent -gt 0 ]; then
     ALERT="${HEADER}%0ASites Down:%0A${downlist}"
     send_message "$ALERT" && printf '%s\n' "Problems found. Message sent via Telegram bot" >&2 || printf '%s\n' "Problems found. Message sending has failed"
-    sql $DB "UPDATE problem SET sent = 1 WHERE sent = 0 AND alert = 1;" #Prevents resending messages
+    $SQL $DB "UPDATE problem SET sent = 1 WHERE sent = 0 AND alert = 1;" #Prevents resending messages
 fi
 
 # If ALL sites have cleared alerts, send an all-clear
 if [ $cleared -gt 0 ]; then
-    clearlist=$(sql $DB "SELECT site FROM problem WHERE alert = 0 AND sent = 1;" | perl -p -e 's/\n/%0A/g')
+    clearlist=$($SQL $DB "SELECT site FROM problem WHERE alert = 0 AND sent = 1;" | perl -p -e 's/\n/%0A/g')
     CLEARED="${HEADER}%0AThese HTTP alerts have cleared:%0A${clearlist}"
     if [ $down -gt 0 ]; then
         CLEARED="${CLEARED}%0ASites still down:%0A${downlist}"
     fi
     send_message "$CLEARED" && printf '%s\n' "A site's alert status has cleared. Message sent via Telegram bot" >&2 || printf '%s\n' "A site's alert status has cleared. Message sending has failed"
-    sql $DB "UPDATE problem SET sent = 0 WHERE sent = 1 AND alert = 0;" #Prevents resending messages
+    $SQL $DB "UPDATE problem SET sent = 0 WHERE sent = 1 AND alert = 0;" #Prevents resending messages
 fi
 
 exit 0
