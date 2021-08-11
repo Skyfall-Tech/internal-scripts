@@ -1,0 +1,183 @@
+#!/bin/sh
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+CONFIG=$1
+
+#Alias DB command for easy future adjustments
+SQL='sqlite3'
+alias sql="$SQL"
+
+# Check for dependencies
+if ! which $SQL >/dev/null 2>&1; then
+    printf '%s\n' "ERROR 12: Missing dependency -- '$SQL' command not found." >&2
+    exit 12
+fi
+if ! which curl >/dev/null 2>&1; then
+    printf '%s\n' "ERROR 12: Missing dependency -- 'curl' command not found." >&2
+    exit 12
+fi
+
+# BEGIN CONFIG CHECK
+### Provides KEY, CHATID, CHKLIST
+if [ -n "$CONFIG" ]; then
+    if [ -f "$CONFIG" ]; then
+        . $CONFIG #Source config file
+    else
+        printf '%s\n' "$CONFIG: File does not exist." >&2
+        exit 10
+    fi
+else
+    if [ -f ".httpcheck_telegram" ]; then
+        . .httpcheck_telegram #Source config file
+    else
+        printf '%s\n' "No configuration file found." >&2
+        exit 10
+    fi
+fi
+# Check if config was loaded by examining all configuration variables, exit if not
+if [ -z "$KEY" ]; then
+    printf '%s\n' "Configuration not set correctly: KEY not set" >&2
+    ERROR11=true
+fi
+if [ -z "$CHATID" ]; then
+    printf '%s\n' "Configuration not set correctly: CHATID not set" >&2
+    ERROR11=true
+fi
+if [ -z "$CHKLIST" ]; then
+    printf '%s\n' "Configuration not set correctly: CHKLIST not set" >&2
+    ERROR11=true
+fi
+if [ -z "$DB" ]; then
+    printf '%s\n' "Configuration not set correctly: DB not set" >&2
+    ERROR11=true
+fi
+if [ -z "$MAX_COUNT" ]; then
+    printf '%s\n' "Configuration not set correctly: MAX_COUNT not set" >&2
+    ERROR11=true
+fi
+[ "$ERROR11" = "true" ] && exit 11
+# END CONFIG CHECK
+
+#DB functions
+db_create() {
+    sql $DB "CREATE TABLE problem (
+                site TEXT UNIQUE NOT NULL,
+                count INT NOT NULL DEFAULT 0,
+                alert INT NOT NULL DEFAULT 0,
+                sent INT NOT NULL DEFAULT 0
+              );"
+}
+db_addsite() {
+    sql $DB "INSERT OR IGNORE INTO problem (site) VALUES('$1');"
+}
+db_inc() {
+    sql $DB "UPDATE problem SET count = count + 1 WHERE site = '$1' AND count < $MAX_COUNT;"
+    if [ $(sql $DB "SELECT count FROM problem WHERE site = '$1';") -ge $MAX_COUNT ]; then
+       sql $DB "UPDATE problem SET alert = 1 WHERE site = '$1';"
+    fi
+}
+db_dec() {
+    sql $DB "UPDATE problem SET count = count - 1 WHERE site = '$1' AND count > 0;"
+    if [ $(sql $DB "SELECT count FROM problem WHERE site = '$1';") -le 0 ]; then
+       sql $DB "UPDATE problem SET alert = 0 WHERE site = '$1';"
+    fi
+}
+
+
+TIME="10"
+URL="https://api.telegram.org/bot$KEY/sendMessage"
+
+#Telegram message function
+send_message() {
+    curl -s --max-time $TIME -d "chat_id=${CHATID}&disable_web_page_preview=1&text=$1" $URL >/dev/null
+}
+
+get_http_code() {
+    if host $(printf '%s\n' $1 | awk '{gsub("https?://|/.*","")}1') 2>&1 >/dev/null; then
+        curl -sILk --max-time $TIME $1 | grep HTTP | tail -n 1 | grep -Eo '[0-9]{3}' || printf '%s\n' 999
+    else
+        printf '%s\n' 000
+    fi
+}
+
+print_time() {
+    date '+%Y-%m-%d %H:%M:%S'
+}
+
+# Prepare message header
+#MSG="${HEADER}%0AProblems Found:"
+FAILURE=false
+
+# Create database if it doesn't exist
+if [ -f $DB ]; then
+    printf '%s\n' "Database found: $DB"
+else
+    printf '%s' "Database not found at '$DB'\nCreating DB ... "
+    if db_create; then
+        printf '%s\n' "DONE"
+    else
+        printf '%s\n' "FAILED"
+        printf '%s\n' "Database creation failed!" >&2
+        exit 13
+    fi
+fi
+
+# Check HTTP codes
+for site in $(grep -v "^#\|^$" $CHKLIST | sort | uniq); do
+    db_addsite $site
+    respcode=$(get_http_code $site)
+    case $respcode in
+        000)
+            printf '%s\n' "[$(print_time)]: PROBLEM -- $site: DNS record not found" >&2
+            db_inc $site
+            #MSG="${MSG}%0A%0A %2B ${site}%0A    DNS record not found"
+            #FAILURE=true
+            ;;
+        200)
+            printf '%s\n' "[$(print_time)]: OK -- $site returns $respcode"
+            db_dec $site
+            ;;
+        999)
+            printf '%s\n' "[$(print_time)]: PROBLEM -- $site caused general cURL failure" >&2
+            db_inc $site
+            ;;
+        *)
+            printf '%s\n' "[$(print_time)]: PROBLEM -- $site returns $respcode" >&2
+            db_inc $site
+            #MSG="${MSG}%0A%0A %2B ${site}%0A    Responding ${respcode}"
+            #FAILURE=true
+            ;;
+    esac
+done || exit 2
+
+### # Send compiled message if any problems were found
+### if [ "$FAILURE" = "true" ]; then
+###     send_message "$MSG" && printf '%s\n' "Problems found. Message sent via Telegram bot" >&2 || printf '%s\n' "Problems found. Message sending has failed"
+### fi
+
+# Find down sites without sent alerts
+unsent=$(sql $DB "SELECT count(*) FROM problem WHERE alert = 1 AND sent = 0;")
+cleared=$(sql $DB "SELECT count(*) FROM problem WHERE alert = 0 AND sent = 1;")
+down=$(sql $DB "SELECT count(*) FROM problem WHERE alert = 1;")
+downlist=$(sql $DB "SELECT site FROM problem WHERE alert = 1;" | perl -p -e 's/\n/%0A/g')
+
+# If ANY sites have unsent alerts, send a list of ALL sites in 'alert' state
+if [ $unsent -gt 0 ]; then
+    ALERT="${HEADER}%0ASites Down:%0A${downlist}"
+    send_message "$ALERT" && printf '%s\n' "Problems found. Message sent via Telegram bot" >&2 || printf '%s\n' "Problems found. Message sending has failed"
+    sql $DB "UPDATE problem SET sent = 1 WHERE sent = 0 AND alert = 1;" #Prevents resending messages
+fi
+
+# If ALL sites have cleared alerts, send an all-clear
+if [ $cleared -gt 0 ]; then
+    clearlist=$(sql $DB "SELECT site FROM problem WHERE alert = 0 AND sent = 1;" | perl -p -e 's/\n/%0A/g')
+    CLEARED="${HEADER}%0AThese HTTP alerts have cleared:%0A${clearlist}"
+    if [ $down -gt 0 ]; then
+        CLEARED="${CLEARED}%0ASites still down:%0A${downlist}"
+    fi
+    send_message "$CLEARED" && printf '%s\n' "A site's alert status has cleared. Message sent via Telegram bot" >&2 || printf '%s\n' "A site's alert status has cleared. Message sending has failed"
+    sql $DB "UPDATE problem SET sent = 0 WHERE sent = 1 AND alert = 0;" #Prevents resending messages
+fi
+
+exit 0
+

@@ -1,0 +1,7 @@
+HEADER="HTTP/S Checker"             #Header for the start of outgoing messages from the bot
+CHATID="5555555"                    #Chat ID for the Telegram room/conversation with bot
+KEY="THISISAUNIQUEANDPRIVATEKEY"    #Your bot's API key
+CHKLIST="${HOME}/.site_check"       #A file containing a list of sites/URLs to check
+DB="/tmp/.httpcheck.sqlite"         #Location of SQLite3 database
+MAX_COUNT=10                        #Max number of 'count' before alert becomes true
+
