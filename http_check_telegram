@@ -64,10 +64,13 @@ db_create() {
                 count INT NOT NULL DEFAULT 0,
                 alert INT NOT NULL DEFAULT 0,
                 sent INT NOT NULL DEFAULT 0
-              );"
+              );" || return 1
 }
 db_addsite() {
     $SQL $DB "INSERT OR IGNORE INTO problem (site) VALUES('$1');"
+}
+db_rmsite() {
+    $SQL $DB "DELETE FROM problem WHERE site = '$1';"
 }
 db_inc() {
     $SQL $DB "UPDATE problem SET count = count + 1 WHERE site = '$1' AND count < $MAX_COUNT;"
@@ -99,6 +102,10 @@ get_http_code() {
     fi
 }
 
+read_checklist() {
+    grep -v "^#\|^$" $CHKLIST | sort | uniq || return 1
+}
+
 print_time() {
     date '+%Y-%m-%d %H:%M:%S'
 }
@@ -110,6 +117,14 @@ FAILURE=false
 # Create database if it doesn't exist
 if [ -f $DB ]; then
     printf '%s\n' "Database found: $DB"
+    # Remove stale entries in DB no longer found in check list
+    printf '%s\n' "Pruning database..."
+    for row in $($SQL $DB "SELECT site FROM problem;"); do
+        if ! read_checklist | grep $row >/dev/null 2>&1; then
+            db_rmsite "$row" && printf '%s\n' "Removing old record: $row"
+        fi
+    done
+    printf '%s\n' "Database pruning complete."
 else
     printf '%s' "Database not found at '$DB'\nCreating DB ... "
     if db_create; then
@@ -122,7 +137,7 @@ else
 fi
 
 # Check HTTP codes
-for site in $(grep -v "^#\|^$" $CHKLIST | sort | uniq); do
+for site in $(read_checklist); do
     db_addsite $site
     respcode=$(get_http_code $site)
     case $respcode in
@@ -148,11 +163,6 @@ for site in $(grep -v "^#\|^$" $CHKLIST | sort | uniq); do
             ;;
     esac
 done || exit 2
-
-### # Send compiled message if any problems were found
-### if [ "$FAILURE" = "true" ]; then
-###     send_message "$MSG" && printf '%s\n' "Problems found. Message sent via Telegram bot" >&2 || printf '%s\n' "Problems found. Message sending has failed"
-### fi
 
 # Find down sites without sent alerts
 unsent=$($SQL $DB "SELECT count(*) FROM problem WHERE alert = 1 AND sent = 0;")
