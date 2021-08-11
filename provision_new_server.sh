@@ -73,6 +73,9 @@ if $(uname -r | grep -E 'el8' &>/dev/null); then
 elif $(uname -r | grep 'arch' &>/dev/null); then
     printf "Arch Linux... "
     sed -i "s_${cidr_old}_${cidr}_g" /etc/netctl/ens18 && printf "DONE\n" || exit 1
+elif $(grep -i 'arch' /etc/os-release &>/dev/null); then
+    printf "Arch Linux (alternative kernel)... "
+    sed -i "s_${cidr_old}_${cidr}_g" /etc/netctl/ens18 && printf "DONE\n" || exit 1
 else
     printf "FAIL\n\nOS distribution not supported! Update IP address manually before rebooting!\n\n"
 fi
