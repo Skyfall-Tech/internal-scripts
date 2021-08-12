@@ -3,6 +3,8 @@
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 CONFIG=$1
 
+WEIGHT=2 #Weight value of non-200 responses
+
 #Alias DB command for easy future adjustments
 SQL='sqlite3'
 
@@ -33,6 +35,9 @@ else
         exit 10
     fi
 fi
+
+W_MAX=$(( $WEIGHT * $MAX_COUNT ))
+
 # Check if config was loaded by examining all configuration variables, exit if not
 if [ -z "$KEY" ]; then
     printf '%s\n' "Configuration not set correctly: KEY not set" >&2
@@ -73,15 +78,31 @@ db_rmsite() {
     $SQL $DB "DELETE FROM problem WHERE site = '$1';"
 }
 db_inc() {
-    $SQL $DB "UPDATE problem SET count = count + 1 WHERE site = '$1' AND count < $MAX_COUNT;"
-    if [ $($SQL $DB "SELECT count FROM problem WHERE site = '$1';") -ge $MAX_COUNT ]; then
+    $SQL $DB "UPDATE problem SET count = count + $WEIGHT WHERE site = '$1' AND count < $W_MAX;"
+    if [ $($SQL $DB "SELECT count FROM problem WHERE site = '$1';") -ge $W_MAX ]; then
        $SQL $DB "UPDATE problem SET alert = 1 WHERE site = '$1';"
+    fi
+
+    # Correct values above $W_MAX, possible due to the implementation of weight.
+    if [ $($SQL $DB "SELECT count FROM problem WHERE site = '$1';") -gt $W_MAX ]; then
+        $SQL $DB "UPDATE problem SET count = $W_MAX WHERE site = '$1';"
     fi
 }
 db_dec() {
-    $SQL $DB "UPDATE problem SET count = count - 1 WHERE site = '$1' AND count > 0;"
+    # Add weight only if alert state is active, allowing alerts to clear in the expected time frame.
+    if [ $($SQL $DB "SELECT alert FROM problem WHERE site = '$1';") -eq 1 ]; then
+        $SQL $DB "UPDATE problem SET count = count - $WEIGHT WHERE site = '$1' AND count > 0;"
+    else
+        $SQL $DB "UPDATE problem SET count = count - 1 WHERE site = '$1' AND count > 0;"
+    fi
+
     if [ $($SQL $DB "SELECT count FROM problem WHERE site = '$1';") -le 0 ]; then
        $SQL $DB "UPDATE problem SET alert = 0 WHERE site = '$1';"
+    fi
+
+    # Correct values below zero, possible due to the implementation of weight.
+    if [ $($SQL $DB "SELECT count FROM problem WHERE site = '$1';") -lt 0 ]; then
+        $SQL $DB "UPDATE problem SET count = 0 WHERE site = '$1';"
     fi
 }
 
