@@ -67,8 +67,8 @@ sed -i "s/${name_old}/${name}/g" /etc/zabbix/zabbix_agentd.conf && printf "DONE\
 
 # Update IP address
 printf "Update IP address... "
-if $(uname -r | grep -E 'el8' &>/dev/null); then
-    printf "CentOS 8... "
+if $(grep 'SUSE' /etc/os-release &>/dev/null); then
+    printf "OpenSuSE... "
     nmcli con mod ens18 ipv4.addresses $cidr && printf "DONE\n" || exit 1
 elif $(uname -r | grep 'arch' &>/dev/null); then
     printf "Arch Linux... "
@@ -76,6 +76,9 @@ elif $(uname -r | grep 'arch' &>/dev/null); then
 elif $(grep -i 'arch' /etc/os-release &>/dev/null); then
     printf "Arch Linux (alternative kernel)... "
     sed -i "s_${cidr_old}_${cidr}_g" /etc/netctl/ens18 && printf "DONE\n" || exit 1
+elif $(uname -r | grep -E 'el8' &>/dev/null); then
+    printf "CentOS 8... "
+    nmcli con mod ens18 ipv4.addresses $cidr && printf "DONE\n" || exit 1
 else
     printf "FAIL\n\nOS distribution not supported! Update IP address manually before rebooting!\n\n"
 fi
