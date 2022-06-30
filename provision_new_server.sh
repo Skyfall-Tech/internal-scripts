@@ -5,7 +5,7 @@
 name_old=$(cat /etc/hostname)
 #Below command preserved in case it is needed to add older OS support
 #ipadd_old=$(ifconfig | awk '/inet6/{next;} /127.0.0.1/{next;} /inet/{print $2;}' | grep 172.23)
-cidr_old=$(ip a | awk '/inet6/{next;} /127.0.0.1/{next;} /inet/{print $2;}' | grep 172.23)
+cidr_old=$(ip a | awk '/inet6/{next;} /127.0.0.1/{next;} /inet/{print $2;}' | grep 172.23 || ip a | awk '/inet6/{next;} /127.0.0.1/{next;} /inet/{print $2;}' | grep 172.21)
 ipadd_old=$(echo $cidr_old | awk -F '/' '{print $1}')
 ipc_present=false
 
