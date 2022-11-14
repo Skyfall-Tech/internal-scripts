@@ -23,27 +23,27 @@ fi
 ## Validate CIDR
 n='([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])'
 m='([0-9]|[12][0-9]|3[012])'
-if ! echo $cidr | grep -E "^$n(\.$n){3}/$m$" &>/dev/null; then
+if ! echo $cidr | grep -E "^$n(\.$n){3}/$m$" 1>&2 2>/dev/null; then
     printf "\nCIDR input is not valid!\n"
     exit 12
 fi
 # End input sanity check
 
 # Test if 'ipcalc' utility is available
-which ipcalc &>/dev/null && ipc_present=true
+which ipcalc &> /dev/null && ipc_present=true
 
 ipadd=$(echo $cidr | awk -F '/' '{print $1}')
 echo
 printf "Review these changes carefully!\n\n"
 if [ "$ipc_present" = true ]; then
-    snm=$(ipcalc $cidr | grep Netmask | grep -Eo "($n.){3}$n")
-    snm_old=$(ipcalc $cidr_old | grep Netmask | grep -Eo "($n.){3}$n")
+    snm=$(ipcalc $cidr | grep Netmask | cut -d " " -f 4)
+    snm_old=$(ipcalc $cidr_old | grep Netmask | cut -d " " -f 4)
     printf "+,CURRENT,PENDING\nHostname:,$name_old,$name\nAddress:,$ipadd_old,$ipadd\nCIDR:,$cidr_old,$cidr\nNetmask:,$snm_old,$snm" | column -s, -t
 else
     printf "+,CURRENT,PENDING\nHostname:,$name_old,$name\nAddress:,$ipadd_old,$ipadd\nCIDR:,$cidr_old,$cidr" | column -s, -t
 fi
 echo
-read -p "Are you sure you want to apply the changes above? (y/N)" -n 1 -r
+read -p "Are you sure you want to apply the changes above? (y/N) " REPLY
 if echo $REPLY | grep -Eq '^[Yy]$'; then
     printf "\n Continuing...\n\n"
 else
@@ -67,18 +67,21 @@ sed -i "s/${name_old}/${name}/g" /etc/zabbix/zabbix_agentd.conf && printf "DONE\
 
 # Update IP address
 printf "Update IP address... "
-if $(grep 'SUSE' /etc/os-release &>/dev/null); then
+if $(grep 'SUSE' /etc/os-release 1>&2 >/dev/null); then
     printf "OpenSuSE... "
     nmcli con mod ens18 ipv4.addresses $cidr && printf "DONE\n" || exit 1
-elif $(uname -r | grep 'arch' &>/dev/null); then
+elif $(uname -r | grep 'arch' 1>&2 >/dev/null); then
     printf "Arch Linux... "
-    sed -i "s_${cidr_old}_${cidr}_g" /etc/netctl/ens18 && printf "DONE\n" || exit 1
-elif $(grep -i 'arch' /etc/os-release &>/dev/null); then
+    awk "{sub(_${cidr_old}_,${cidr})}" /etc/netctl/ens18 && printf "DONE\n" || exit 1
+elif $(grep -i 'arch' /etc/os-release 1>&2 >/dev/null); then
     printf "Arch Linux (alternative kernel)... "
-    sed -i "s_${cidr_old}_${cidr}_g" /etc/netctl/ens18 && printf "DONE\n" || exit 1
-elif $(uname -r | grep -E 'el8' &>/dev/null); then
+    awk "{sub(_${cidr_old}_,${cidr})}" /etc/netctl/ens18 && printf "DONE\n" || exit 1
+elif $(uname -r | grep -E 'el8' 1>&2 >/dev/null); then
     printf "CentOS 8... "
     nmcli con mod ens18 ipv4.addresses $cidr && printf "DONE\n" || exit 1
+elif $(grep 'ubuntu' /etc/os-release 1>&2 >/dev/null); then
+    printf "Ubuntu... "
+    awk "{sub(_${cidr_old}_,${cidr})}" /etc/netplan/00-installer-config.yaml && printf "DONE\n" || exit 1
 else
     printf "FAIL\n\nOS distribution not supported! Update IP address manually before rebooting!\n\n"
 fi
@@ -101,7 +104,7 @@ fi
 
 printf "\nReboot to apply all changes.\n\n"
 
-read -p "Would you like to reboot now? (y/N)" -n 1 -r
+read -p "Would you like to reboot now? (y/N) " REPLY
 if echo $REPLY | grep -Eq '^[Yy]$'; then
     printf "\n Rebooting...\n\n"
     shutdown -r now
@@ -110,4 +113,3 @@ else
     printf "\nReboot has been deferred.\n"
     exit 0
 fi
-
