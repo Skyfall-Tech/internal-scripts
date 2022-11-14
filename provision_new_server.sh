@@ -81,7 +81,7 @@ elif $(uname -r | grep -E 'el8' 2>&1 >/dev/null); then
     nmcli con mod ens18 ipv4.addresses $cidr && printf "DONE\n" || exit 1
 elif $(grep 'ubuntu' /etc/os-release 2>&1 >/dev/null); then
     printf "Ubuntu... "
-    awk "{sub(_${cidr_old}_,${cidr})}" /etc/netplan/00-installer-config.yaml && printf "DONE\n" || exit 1
+     sed -i "s_${cidr_old}_${cidr}_g" /etc/netplan/00-installer-config.yaml && printf "DONE\n" || exit 1
 else
     printf "FAIL\n\nOS distribution not supported! Update IP address manually before rebooting!\n\n"
 fi
