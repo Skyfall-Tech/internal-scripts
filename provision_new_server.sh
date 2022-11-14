@@ -23,14 +23,14 @@ fi
 ## Validate CIDR
 n='([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])'
 m='([0-9]|[12][0-9]|3[012])'
-if ! echo $cidr | grep -E "^$n(\.$n){3}/$m$" &>/dev/null; then
+if ! echo $cidr | grep -E "^$n(\.$n){3}/$m$" 2>&1 >/dev/null; then
     printf "\nCIDR input is not valid!\n"
     exit 12
 fi
 # End input sanity check
 
 # Test if 'ipcalc' utility is available
-which ipcalc &>/dev/null && ipc_present=true
+which ipcalc 2>&1 >/dev/null && ipc_present=true
 
 ipadd=$(echo $cidr | awk -F '/' '{print $1}')
 echo
@@ -67,18 +67,21 @@ sed -i "s/${name_old}/${name}/g" /etc/zabbix/zabbix_agentd.conf && printf "DONE\
 
 # Update IP address
 printf "Update IP address... "
-if $(grep 'SUSE' /etc/os-release &>/dev/null); then
+if $(grep 'SUSE' /etc/os-release 2>&1 >/dev/null); then
     printf "OpenSuSE... "
     nmcli con mod ens18 ipv4.addresses $cidr && printf "DONE\n" || exit 1
-elif $(uname -r | grep 'arch' &>/dev/null); then
+elif $(uname -r | grep 'arch' 2>&1 >/dev/null); then
     printf "Arch Linux... "
     sed -i "s_${cidr_old}_${cidr}_g" /etc/netctl/ens18 && printf "DONE\n" || exit 1
-elif $(grep -i 'arch' /etc/os-release &>/dev/null); then
+elif $(grep -i 'arch' /etc/os-release 2>&1 >/dev/null); then
     printf "Arch Linux (alternative kernel)... "
     sed -i "s_${cidr_old}_${cidr}_g" /etc/netctl/ens18 && printf "DONE\n" || exit 1
-elif $(uname -r | grep -E 'el8' &>/dev/null); then
+elif $(uname -r | grep -E 'el8' 2>&1 >/dev/null); then
     printf "CentOS 8... "
     nmcli con mod ens18 ipv4.addresses $cidr && printf "DONE\n" || exit 1
+elif $(grep 'ubuntu' /etc/os-release 2>&1 >/dev/null); then
+    printf "Ubuntu... "
+    awk "{sub(_${cidr_old}_,${cidr})}" /etc/netplan/00-installer-config.yaml && printf "DONE\n" || exit 1
 else
     printf "FAIL\n\nOS distribution not supported! Update IP address manually before rebooting!\n\n"
 fi
