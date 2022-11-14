@@ -23,7 +23,7 @@ fi
 ## Validate CIDR
 n='([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])'
 m='([0-9]|[12][0-9]|3[012])'
-if ! echo $cidr | grep -E "^$n(\.$n){3}/$m$" 1>&2 2>/dev/null; then
+if ! echo $cidr | grep -E "^$n(\.$n){3}/$m$" 1>&2 >/dev/null; then
     printf "\nCIDR input is not valid!\n"
     exit 12
 fi
