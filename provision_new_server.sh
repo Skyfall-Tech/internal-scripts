@@ -36,8 +36,8 @@ ipadd=$(echo $cidr | awk -F '/' '{print $1}')
 echo
 printf "Review these changes carefully!\n\n"
 if [ "$ipc_present" = true ]; then
-    snm=$(ipcalc $cidr | grep Netmask | grep -Eo "($n.){3}$n")
-    snm_old=$(ipcalc $cidr_old | grep Netmask | grep -Eo "($n.){3}$n")
+    snm=$(ipcalc $cidr | grep Netmask | grep -Eo "($n\.){3}$n")
+    snm_old=$(ipcalc $cidr_old | grep Netmask | grep -Eo "($n\.){3}$n")
     printf "+,CURRENT,PENDING\nHostname:,$name_old,$name\nAddress:,$ipadd_old,$ipadd\nCIDR:,$cidr_old,$cidr\nNetmask:,$snm_old,$snm" | column -s, -t
 else
     printf "+,CURRENT,PENDING\nHostname:,$name_old,$name\nAddress:,$ipadd_old,$ipadd\nCIDR:,$cidr_old,$cidr" | column -s, -t
