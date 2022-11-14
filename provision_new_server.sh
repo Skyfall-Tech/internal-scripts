@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #Author: Aaron Johnson
 #Comment: This script is not intended to be portable or fail-safe, and is used in my personal provisioning process.
 
