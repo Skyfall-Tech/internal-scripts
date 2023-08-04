@@ -172,10 +172,6 @@ for site in $(read_checklist); do
             printf '%s\n' "[$(print_time)]: OK -- $site returns $respcode"
             db_dec $site
             ;;
-        302)
-            printf '%s\n' "[$(print_time)]: WARNING -- $site returns $respcode"
-            db_dec $site
-            ;;
         999)
             printf '%s\n' "[$(print_time)]: PROBLEM -- $site caused general cURL failure" >&2
             db_inc $site
