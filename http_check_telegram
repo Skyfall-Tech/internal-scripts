@@ -117,7 +117,7 @@ send_message() {
 
 get_http_code() {
     if host $(printf '%s\n' $1 | awk '{gsub("https?://|/.*","")}1') 2>&1 >/dev/null; then
-        curl -sILk --max-time $TIME $1 | grep HTTP | tail -n 1 | grep -Eo '[0-9]{3}' || printf '%s\n' 999
+        curl -X GET -sILk --max-time $TIME $1 | grep HTTP | tail -n 1 | grep -Eo '[0-9]{3}' || printf '%s\n' 999
     else
         printf '%s\n' 000
     fi
